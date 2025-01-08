@@ -1,11 +1,10 @@
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { MainNav } from "@/components/main-nav"
-import dynamic from 'next/dynamic'
+import DynamicThreeCanvas from '@/components/DynamicThreeCanvas'
 
-const ThreeCanvas = dynamic(() => import('@/components/three-canvas').then((mod) => mod.ThreeCanvas), {
-  ssr: false,
-  loading: () => <div className="fixed inset-0 -z-10 bg-black" />
-})
+export const metadata = {
+  // ... existing metadata
+}
 
 export default function RootLayout({
   children,
@@ -20,7 +19,7 @@ export default function RootLayout({
             <MainNav />
             <main className="flex-1 overflow-hidden">
               <div className="relative h-screen">
-                <ThreeCanvas className="fixed inset-0 -z-10" />
+                <DynamicThreeCanvas />
                 <div className="relative z-10 h-full overflow-auto">
                   {children}
                 </div>

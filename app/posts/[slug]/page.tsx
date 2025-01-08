@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import matter from 'gray-matter'
+import { serialize } from 'next-mdx-remote/serialize'
 import { MDXRemote } from 'next-mdx-remote/rsc'
 
 interface PostProps {
@@ -15,6 +16,10 @@ export default async function Post({ params }: PostProps) {
   
   const fileContent = await fs.readFile(filePath, 'utf8')
   const { content, data } = matter(fileContent)
+  
+  const mdxSource = await serialize(content)
+
+  const mdxContent = await MDXRemote({ source: mdxSource })
 
   return (
     <article className="relative mx-auto max-w-3xl p-6">
@@ -23,7 +28,7 @@ export default async function Post({ params }: PostProps) {
         <div className="text-sm text-muted-foreground">
           {new Date(data.date).toLocaleDateString()}
         </div>
-        <MDXRemote source={content} />
+        
       </div>
     </article>
   )
