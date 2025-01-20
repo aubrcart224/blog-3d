@@ -3,26 +3,41 @@
 //   but for the new App Router in Next.js 13, this ensures 
 //   this file is treated as a client component.
 
-
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from "three";
 
+// Separate component for the 3D orb
+function OrbMesh() {
+  const orbRef = useRef();
+  const [scale, setScale] = useState(1);
+
+  // Animation loop using useFrame
+  useFrame(() => {
+    if (orbRef.current) {
+      orbRef.current.rotation.y += 0.01;
+      orbRef.current.scale.set(scale, scale, scale);
+    }
+  });
+
+  return (
+    <>
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[5, 10, 7]} intensity={1} />
+      <mesh ref={orbRef}>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshStandardMaterial color={0x00ff00} />
+      </mesh>
+    </>
+  );
+}
+
 export default function Orb() {
-  const containerRef = useRef(null);
-  const orbRef = useRef(null);       // We'll store our Three.js mesh here
-  const rendererRef = useRef(null);
-  const sceneRef = useRef(null);
-  const cameraRef = useRef(null);
+  const blogOutputRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  // For storing partial transcription
-  const blogOutputRef = useRef(null);
-
-  /**
-   * 1) Speech recognition setup
-   */
+  // Speech recognition setup
   useEffect(() => {
-    // Only run in browser
     if (typeof window === "undefined") return;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -31,7 +46,6 @@ export default function Orb() {
       return;
     }
 
-    // Create recognition
     const recognition = new SpeechRecognition();
     recognition.lang = "en-US";
     recognition.continuous = true;
@@ -43,7 +57,6 @@ export default function Orb() {
         transcript += event.results[i][0].transcript;
       }
 
-      // Update our blog output DOM if available
       if (blogOutputRef.current) {
         blogOutputRef.current.innerText = transcript;
       }
@@ -54,156 +67,25 @@ export default function Orb() {
     };
 
     recognition.onend = () => {
-      // Attempt to restart for continuous listening
       recognition.start();
     };
 
     recognition.start();
     recognitionRef.current = recognition;
-  }, []);
 
-  /**
-   * 2) Set up Three.js scene once on mount
-   */
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    // Create scene, camera, renderer
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
-
-    const camera = new THREE.PerspectiveCamera(
-      75, 
-      containerRef.current.clientWidth / containerRef.current.clientHeight, 
-      0.1, 
-      1000
-    );
-    camera.position.z = 5;
-    cameraRef.current = camera;
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(
-      containerRef.current.clientWidth,
-      containerRef.current.clientHeight
-    );
-    containerRef.current.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
-
-    // Create the orb
-    const geometry = new THREE.SphereGeometry(1, 32, 32);
-    const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-    const orb = new THREE.Mesh(geometry, material);
-    scene.add(orb);
-    orbRef.current = orb;
-
-    // Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
-
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(5, 10, 7);
-    scene.add(directionalLight);
-
-    // Start render/animation loop
-    const animate = () => {
-      requestAnimationFrame(animate);
-      // Simple rotation
-      if (orbRef.current) {
-        orbRef.current.rotation.y += 0.01;
-      }
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    // Cleanup on unmount
     return () => {
-      // Stop the animation loop if needed or remove the canvas
-      if (renderer && renderer.domElement) {
-        renderer.domElement.remove();
-      }
+      recognition.stop();
     };
-  }, []);
-
-  /**
-   * 3) Web Audio API for volume -> animate orb scale
-   */
-  useEffect(() => {
-    let audioContext;
-    let analyser;
-    let dataArray;
-    let rafId;
-
-    if (typeof navigator !== "undefined") {
-      navigator.mediaDevices
-        .getUserMedia({ audio: true, video: false })
-        .then((stream) => {
-          audioContext = new (window.AudioContext || window.webkitAudioContext)();
-          const source = audioContext.createMediaStreamSource(stream);
-
-          analyser = audioContext.createAnalyser();
-          analyser.fftSize = 1024;
-          source.connect(analyser);
-
-          dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-          const updateAudioData = () => {
-            rafId = requestAnimationFrame(updateAudioData);
-            analyser.getByteFrequencyData(dataArray);
-
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-              sum += dataArray[i];
-            }
-            const averageVolume = sum / dataArray.length;
-            updateOrbScale(averageVolume);
-          };
-          updateAudioData();
-        })
-        .catch((err) => {
-          console.error("Error accessing microphone:", err);
-        });
-    }
-
-    function updateOrbScale(volume) {
-      if (!orbRef.current) return;
-      // Map volume [0..255] to scale factor [1..2]
-      const minScale = 1.0;
-      const maxScale = 2.0;
-      const scale = minScale + (volume / 255) * (maxScale - minScale);
-      orbRef.current.scale.set(scale, scale, scale);
-    }
-
-    // Cleanup
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      if (audioContext) audioContext.close();
-    };
-  }, []);
-
-  /**
-   * 4) Handle window resizing (optional)
-   */
-  useEffect(() => {
-    const handleResize = () => {
-      if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-
-      cameraRef.current.aspect = width / height;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(width, height);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
-      <div
-        ref={containerRef}
-        style={{ width: "100%", height: "100%", overflow: "hidden" }}
-      />
-      {/* Blog text output */}
+      <Canvas
+        camera={{ position: [0, 0, 5], fov: 75 }}
+        style={{ width: "100%", height: "100%" }}
+      >
+        <OrbMesh />
+      </Canvas>
       <div
         ref={blogOutputRef}
         style={{
